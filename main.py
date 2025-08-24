@@ -68,7 +68,7 @@ async def on_event_error(error):
 
 
 
-#@bot.tree.error
+@bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
     if isinstance(error, app_commands.MissingPermissions):
         return

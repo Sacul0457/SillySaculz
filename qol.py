@@ -4,8 +4,6 @@ import asyncio
 import aiohttp
 from discord.ext import commands
 from typing import Literal
-import os
-from dotenv import load_dotenv
 from discordapidocs import DiscordAPiDocs
 
 LANGUAGES = {

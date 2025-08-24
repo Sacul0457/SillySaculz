@@ -22,7 +22,7 @@ class TaskBot(commands.Bot):
         asyncio.get_event_loop().set_debug(True)
         global uptime
         uptime = discord.utils.utcnow().timestamp()
-        await self.load_exention(cog)
+        await self.load_extension(cog)
 
     async def fetch_invitev2(self, invite_code: str) -> Invitesv2:
         if invite_code.startswith(f"https://discord.gg"):

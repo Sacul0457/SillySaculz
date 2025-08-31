@@ -452,7 +452,7 @@ async def sinfo(interaction:discord.Interaction, invite_or_id: str | None = None
         try:
             preview = await bot.fetch_guild_preview(int(invite_or_id))
         except discord.NotFound:
-            return await interaction.followup.send(f"No such guild preview: `{id}`", ephemeral=True)
+            return await interaction.followup.send(f"No such guild preview: `{invite_or_id}`", ephemeral=True)
         except Exception as e:
             return await interaction.followup.send(f"Error Occurred: {e}", ephemeral=True)
         name = preview.name

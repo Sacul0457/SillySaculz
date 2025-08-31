@@ -376,13 +376,15 @@ class GuildFeatureButton(discord.ui.Button):
 
 class WithInviteContainer(discord.ui.Container):
     def __init__(self, channel_id: int, channel_type: discord.ChannelType, channel_name: str, member_count: int, online_count: int, tag: str, badge_icon: str, primary_colour: str, 
-                 secondary_colour: str, guild_id: int, guild_name: str, description: str, verify_level: int, url_code: str, nsfw_level: int, nsfw: bool, boosts: int, tier: int, features: list[str], icon: str, banner: str):
+                 secondary_colour: str, guild_id: int, guild_name: str, description: str, verify_level: int, url_code: str, nsfw_level: int, nsfw: bool, boosts: int, tier: int,
+                   features: list[str], icon: str, banner: str, nickname_changeable: bool):
         super().__init__()
         
         thumbnail_text = (f"Name: {guild_name}\nID: `{guild_id}`\nMembers: {member_count} | {online_count} online\
                           \nChannel: [`#{channel_name}`]({bot.get_partial_messageable(channel_id, guild_id=guild_id).jump_url}) ({channel_id})")
         tag_text = (f"Tag: `{tag}`\nPrimary colour: {primary_colour}\nSeconadary colour: {secondary_colour}")
-        second_text = (f"NSFW: {nsfw} | Level {nsfw_level}\nVerification Level: {verify_level}\nBoosts: `{boosts}` | Tier {tier}\nInvite Code: `{url_code}`")
+        second_text = (f"Nickname Changeable: {'✅' if nickname_changeable else '❌'}\nNSFW: {'✅' if nsfw else '❌'} | Level {nsfw_level}\nVerification Level: {verify_level}\
+                       \nBoosts: `{boosts}` | Tier {tier}\nInvite Code: `{url_code}`")
         self.add_item(discord.ui.Section(accessory=discord.ui.Thumbnail(media=icon)).add_item(thumbnail_text))
         self.add_item(discord.ui.Separator())
         if tag:
@@ -395,9 +397,11 @@ class WithInviteContainer(discord.ui.Container):
         self.add_item(discord.ui.MediaGallery(*[discord.MediaGalleryItem(media=banner)]))
 
 class WithInviteView(discord.ui.LayoutView):
-    def __init__(self, channel_id: int, channel_type, channel_name, member_count, online_count, tag, badge_icon, primary_colour, secondary_colour, guild_id, guild_name, description, verify_level, url_code, nsfw_level, nsfw, boosts, tier, features, icon, banner):
+    def __init__(self, channel_id: int, channel_type, channel_name, member_count, online_count, tag, badge_icon, primary_colour, secondary_colour, 
+                 guild_id, guild_name, description, verify_level, url_code, nsfw_level, nsfw, boosts, tier, features, icon, banner, nickname_changeable):
         super().__init__(timeout=None)
-        self.add_item(WithInviteContainer(channel_id, channel_type, channel_name, member_count, online_count, tag, badge_icon, primary_colour, secondary_colour, guild_id, guild_name, description, verify_level, url_code, nsfw_level, nsfw, boosts, tier, features, icon, banner))
+        self.add_item(WithInviteContainer(channel_id, channel_type, channel_name, member_count, online_count, tag, badge_icon, primary_colour, secondary_colour, 
+                                          guild_id, guild_name, description, verify_level, url_code, nsfw_level, nsfw, boosts, tier, features, icon, banner, nickname_changeable))
 
 
 class NoInviteContainer(discord.ui.Container):
@@ -412,22 +416,57 @@ class NoInviteView(discord.ui.LayoutView):
     def __init__(self, guild_id: int, guild_features: list[str], locale: str, nsfw_level: int):
         super().__init__(timeout=None)
         self.add_item(NoInviteContainer(guild_id, guild_features, locale, nsfw_level))
+
+
+class PreviewContainer(discord.ui.Container):
+    def __init__(self, name: str, id: int, member_count: int, online_count: int, features: list[str], 
+                 description: str | None, created_at: int, icon: str, discovery_splash: str):
+        super().__init__()
+        main_text = discord.ui.TextDisplay(f"Name: {name}\nID: `{id}`\nCreated on: <t:{created_at}:f>\
+                                            \nMembers: {member_count} | {online_count} Online\
+                                            {f"\n> {description}" if description is not None else ""}")
+        self.add_item(discord.ui.Section(main_text,
+                                         accessory=discord.ui.Thumbnail(icon)))
+        self.add_item(discord.ui.Separator())
+        self.add_item(discord.ui.Section(f"Guild Features [{len(features)}]", accessory=GuildFeatureButton(features)))
+        self.add_item(discord.ui.MediaGallery(discord.MediaGalleryItem(discovery_splash)))
+
+class PreviewView(discord.ui.LayoutView):
+    def __init__(self, name, id, member_count, online_count, features, description, created_at, icon, discovery_splash):
+        super().__init__(timeout=None)
+        self.add_item(PreviewContainer(name, id, member_count, online_count, features, description, created_at, icon, discovery_splash))
                  
 @bot.tree.command(name="sinfo", description=f"Get information about a server!")
-@app_commands.describe(invite_code = "The invite code of the server")
+@app_commands.describe(invite_or_id = "The invite code or ID of the server")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 @app_commands.allowed_installs(guilds=True, users=True)
-async def sinfo(interaction:discord.Interaction, invite_code: str | None = None) -> str:
+async def sinfo(interaction:discord.Interaction, invite_or_id: str | None = None) -> str:
     await interaction.response.defer()
-    if invite_code is None:
+    if invite_or_id is None:
         guild_id = interaction.guild_id
         locale = interaction.guild.preferred_locale
         guild_features = interaction.guild.features
         nsfw_level = interaction.guild.nsfw_level.name
         await interaction.followup.send(view=NoInviteView(guild_id, guild_features, locale, nsfw_level))
+    elif invite_or_id.isdigit() and 20 > len(invite_or_id) > 17:
+        try:
+            preview = await bot.fetch_guild_preview(int(invite_or_id))
+        except discord.NotFound:
+            return await interaction.followup.send(f"No such guild preview: `{id}`", ephemeral=True)
+        except Exception as e:
+            return await interaction.followup.send(f"Error Occurred: {e}", ephemeral=True)
+        name = preview.name
+        member_count = preview.approximate_member_count
+        online_count = preview.approximate_presence_count
+        features = preview.features
+        description = preview.description
+        created_at = int(preview.created_at.timestamp())
+        icon = preview.icon.url if preview.icon is not None else ""
+        discovery_splash = preview.discovery_splash.url if preview.discovery_splash is not None else ""
+        await interaction.followup.send(view=PreviewView(name, int(invite_or_id), member_count, online_count, features, description, created_at, icon, discovery_splash))
     else:
         try:
-            invite = await bot.fetch_invitev2(invite_code)                                                                   
+            invite = await bot.fetch_invitev2(invite_or_id)                                                                   
         except discord.NotFound as e:
             return await interaction.followup.send("Invalid invite!", ephemeral=True)
         channel_id = invite.channel.id
@@ -451,23 +490,11 @@ async def sinfo(interaction:discord.Interaction, invite_code: str | None = None)
         list_features = [f"{feature} **__(Exclusive)__**" if "_TEST" in feature  else feature for feature in invite.guild.features]
         icon = invite.guild.icon.url
         banner = invite.guild.banner.url if invite.guild.banner else ""
+        nickname_changeable = invite.guild.is_nickname_changeable()
         await interaction.followup.send(view=WithInviteView(channel_id, channel_type, channel_name, member_count, online_count, tag, badge_icon, primary_colour, secondary_colour, 
-                                                            id, guild_name, description, verify_level, vanity_url_code, nsfw_level, nsfw, boosts, tier, list_features, icon, banner))
+                                                            id, guild_name, description, verify_level, vanity_url_code, nsfw_level, nsfw, boosts, tier, list_features, icon, banner, nickname_changeable))
 
 
-
-@bot.tree.command(description="Get the server created_at using server id")
-@app_commands.describe(guild_id="The server ID")
-@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-@app_commands.allowed_installs(guilds=True, users=True)
-async def id(interaction:discord.Interaction, guild_id : str):
-    if guild_id is None:
-        guild_id = interaction.guild.id
-    discord_epoch = 1420070400000
-    timestamp = (int(guild_id) >> 22) + discord_epoch
-    embed = discord.Embed(title="Guild Timestamp", description=f">>> **ID:** {guild_id}\n**Created at:** <t:{int(timestamp / 1000)}:f> | `{int(timestamp / 1000)}`",
-                          color=discord.Color.blurple())
-    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="ping", description="Get the bot's ping and stats")
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
@@ -480,5 +507,25 @@ async def ping(interaction:discord.Interaction) -> None:
     embed.set_author(name=f"@{bot.user.name}'s Bot Stats", icon_url=bot.user.display_avatar.url)
     embed.set_thumbnail(url=bot.user.display_avatar.url)
     await interaction.response.send_message(embed=embed)
+
+class CreatedAtContainer(discord.ui.Container):
+    def __init__(self, id: int):
+        super().__init__()
+        timestamp = discord.utils.snowflake_time(id)
+        self.add_item(discord.ui.TextDisplay(f"- ID: `{id}`\n- Created on: {discord.utils.format_dt(timestamp)}"))
+
+class CreatedAtView(discord.ui.LayoutView):
+    def __init__(self, id: int):
+        super().__init__(timeout=None)
+        self.add_item(CreatedAtContainer(id))
+
+@bot.tree.command(name="created_at", description="Get the creation time of an object")
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.describe(id = "The ID of the object")
+async def created_at(interaction:discord.Interaction, id: str) -> None:
+    if not id.isdigit() or 19 < len(id) < 18 :
+        return await interaction.response.send_message(f"This is not an ID!", ephemeral=True)
+    await interaction.response.send_message(view=CreatedAtView(int(id)))
 
 bot.run('YOUR_TOKEN')

@@ -3,5 +3,5 @@ a discord bot of mine :D
 
 PSLSSSS WORK
 UHH
-test
+testtest mesasg 4
 test message 32
